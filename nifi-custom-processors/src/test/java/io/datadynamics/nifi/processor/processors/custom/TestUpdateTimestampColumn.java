@@ -65,6 +65,6 @@ public class TestUpdateTimestampColumn {
 
         // FlowFile 확인
         final MockFlowFile out = runner.getFlowFilesForRelationship(UpdateTimestampColumn.REL_SUCCESS).get(0);
-        out.assertContentEquals("header\nJane Doe,35,2021-11-01 10:07:44,2021-11-02 02:07:44\n");
+        out.assertContentEquals("header\nJane Doe,35,2021-09-27 16:47:44,2021-11-02 02:07:44\n");
     }
 }

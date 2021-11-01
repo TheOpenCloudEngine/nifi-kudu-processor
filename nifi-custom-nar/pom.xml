@@ -17,6 +17,19 @@
         <source.skip>true</source.skip>
     </properties>
 
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.nifi</groupId>
+                <artifactId>nifi-nar-maven-plugin</artifactId>
+                <version>1.3.2</version>
+                <configuration>
+                    <enforceDocGeneration>false</enforceDocGeneration>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
     <dependencies>
         <dependency>
             <groupId>io.datadynamics.nifi.processor</groupId>
