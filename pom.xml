@@ -18,7 +18,4 @@
         <module>nifi-custom-nar</module>
     </modules>
 
-    <properties>
-    </properties>
-
 </project>
