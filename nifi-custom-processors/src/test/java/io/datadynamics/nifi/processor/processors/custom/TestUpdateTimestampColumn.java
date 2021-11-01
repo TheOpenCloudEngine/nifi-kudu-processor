@@ -13,15 +13,12 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.Collections;
-
 public class TestUpdateTimestampColumn {
 
     private TestRunner runner;
     private MockRecordParser readerService;
     private MockRecordWriter writerService;
 
-    //Apparently pretty printing is not portable as these tests fail on windows
     @BeforeClass
     public static void setUpSuite() {
         Assume.assumeTrue("Test only runs on *nix", !SystemUtils.IS_OS_WINDOWS);
@@ -43,35 +40,31 @@ public class TestUpdateTimestampColumn {
         runner.setProperty(UpdateTimestampColumn.RECORD_READER, "reader");
         runner.setProperty(UpdateTimestampColumn.RECORD_WRITER, "writer");
 
+        // Reader에 스키마를 지정한다.
         readerService.addSchemaField("name", RecordFieldType.STRING);
         readerService.addSchemaField("age", RecordFieldType.INT);
         readerService.addSchemaField("create_time", RecordFieldType.TIMESTAMP);
+        readerService.addSchemaField("track_out_time", RecordFieldType.TIMESTAMP);
     }
 
     @Test
-    public void testLiteralReplacementValue() {
-        runner.setProperty("/name", "Jane Doe");
+    public void testTimestamp() {
+        // 속성을 설정
+        runner.setProperty("timestamp-column-names", "create_time,track_out_time");
+        runner.setProperty("timestamp-column-values-string", "/create_time=${field.value:format(\"yyyy-MM-dd HH:mm:ss\", \"America/Los_Angeles\")}\n" +
+                "/track_out_time=${field.value:format(\"yyyy-MM-dd HH:mm:ss\", \"Asia/Seoul\")}\n");
+
         runner.enqueue("");
 
-        readerService.addRecord("John Doe", 35);
+        // 레코드 추가
+        readerService.addRecord("Jane Doe", 35, "1632786464214", "1635786464214");
         runner.run();
 
+        // 성공 확인
         runner.assertAllFlowFilesTransferred(UpdateTimestampColumn.REL_SUCCESS, 1);
+
+        // FlowFile 확인
         final MockFlowFile out = runner.getFlowFilesForRelationship(UpdateTimestampColumn.REL_SUCCESS).get(0);
-        out.assertContentEquals("header\nJane Doe,35\n");
+        out.assertContentEquals("header\nJane Doe,35,2021-11-01 10:07:44,2021-11-02 02:07:44\n");
     }
-
-    @Test
-    public void testLiteralReplacementValueExpressionLanguage() {
-        runner.setProperty("/name", "${newName}");
-        runner.enqueue("", Collections.singletonMap("newName", "Jane Doe"));
-
-        readerService.addRecord("John Doe", 35);
-        runner.run();
-
-        runner.assertAllFlowFilesTransferred(UpdateTimestampColumn.REL_SUCCESS, 1);
-        final MockFlowFile out = runner.getFlowFilesForRelationship(UpdateTimestampColumn.REL_SUCCESS).get(0);
-        out.assertContentEquals("header\nJane Doe,35\n");
-    }
-
 }
