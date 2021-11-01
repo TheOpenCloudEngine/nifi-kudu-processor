@@ -53,6 +53,7 @@ public abstract class AbstractRecordProcessor extends AbstractProcessor {
             .name("success")
             .description("FlowFiles that are successfully transformed will be routed to this relationship")
             .build();
+
     static final Relationship REL_FAILURE = new Relationship.Builder()
             .name("failure")
             .description("If a FlowFile cannot be transformed from the configured input format to the configured output format, "

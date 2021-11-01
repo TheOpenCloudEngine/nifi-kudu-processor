@@ -29,53 +29,49 @@ import java.util.stream.Stream;
 @Tags({"update", "record", "generic", "schema", "custom", "timestamp"})
 @CapabilityDescription("")
 @WritesAttributes({
-        @WritesAttribute(attribute = "record.error.message", description = "이 속성은 Reader 또는 Writer에서 실패시 에러 메시지를 제공합니다")
+        @WritesAttribute(attribute = "record.index", description = "This attribute provides the current row index and is only available inside the literal value expression."),
+        @WritesAttribute(attribute = "record.error.message", description = "This attribute provides on failure the error message encountered by the Reader or Writer.")
 })
-public class UpdateTimestampColumn extends AbstractRecordProcessor {
-
+public class UpdateTimestampColumnOrg extends AbstractRecordProcessor {
     private static final String FIELD_NAME = "field.name";
     private static final String FIELD_VALUE = "field.value";
     private static final String FIELD_TYPE = "field.type";
 
-    private volatile RecordPathCache recordPathCache;
+    private static final String RECORD_INDEX = "record.index";
 
-    /**
-     * 문자열 기반의 Record Path 목록
-     */
+    private volatile RecordPathCache recordPathCache;
     private volatile List<String> recordPaths;
 
+    static final AllowableValue LITERAL_VALUES = new AllowableValue("literal-value", "Literal Value",
+            "The value entered for a Property (after Expression Language has been evaluated) is the desired value to update the Record Fields with. Expression Language "
+                    + "may reference variables 'field.name', 'field.type', and 'field.value' to access information about the field and the value of the field being evaluated.");
     static final AllowableValue RECORD_PATH_VALUES = new AllowableValue("record-path-value", "Record Path Value",
             "The value entered for a Property (after Expression Language has been evaluated) is not the literal value to use but rather is a Record Path "
                     + "that should be evaluated against the Record, and the result of the RecordPath will be used to update the Record. Note that if this option is selected, "
                     + "and the Record Path results in multiple values for a given Record, the input FlowFile will be routed to the 'failure' Relationship.");
 
-    static final PropertyDescriptor COLUMN_NAMES = new PropertyDescriptor.Builder()
-            .name("timestamp-column-names")
-            .displayName("타임스탬프 컬럼명 (comma separator)")
-            .description("타임스탬프 형식을 가진 컬럼명 목록을 콤마 구분자를 갖도록 지정하십시오 (예; create_time,update_time)")
-            .allowableValues(RECORD_PATH_VALUES)
-            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
+    static final PropertyDescriptor REPLACEMENT_VALUE_STRATEGY = new PropertyDescriptor.Builder()
+            .name("replacement-value-strategy")
+            .displayName("Replacement Value Strategy")
+            .description("Specifies how to interpret the configured replacement values")
+            .allowableValues(LITERAL_VALUES, RECORD_PATH_VALUES)
+            .defaultValue(LITERAL_VALUES.getValue())
+            .expressionLanguageSupported(ExpressionLanguageScope.NONE)
             .required(true)
             .build();
 
-    /**
-     * 정적으로 사용자가 입력할 수 있는 속성에 대한 Property Descriptor를 정의합니다.
-     */
     @Override
     protected List<PropertyDescriptor> getSupportedPropertyDescriptors() {
         final List<PropertyDescriptor> properties = new ArrayList<>(super.getSupportedPropertyDescriptors());
-        properties.add(COLUMN_NAMES);
+        properties.add(REPLACEMENT_VALUE_STRATEGY);
         return properties;
     }
 
-    /**
-     * 동적으로 사용자가 추가할 수 있는 속성에 대한 Property Descriptor를 정의합니다.
-     */
     @Override
     protected PropertyDescriptor getSupportedDynamicPropertyDescriptor(final String propertyDescriptorName) {
         return new PropertyDescriptor.Builder()
                 .name(propertyDescriptorName)
-                .description("RecordPath에 일치하는 Record의 타임스탬프 필드의 값을 지정하십시오 : " + propertyDescriptorName)
+                .description("Specifies the value to use to replace fields in the record that match the RecordPath: " + propertyDescriptorName)
                 .required(false)
                 .dynamic(true)
                 .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
@@ -92,9 +88,9 @@ public class UpdateTimestampColumn extends AbstractRecordProcessor {
         }
 
         return Collections.singleton(new ValidationResult.Builder()
-                .subject("사용자 정의 속성")
+                .subject("User-defined Properties")
                 .valid(false)
-                .explanation("최소한 1개 이상의 Timestamp 형식의 컬럼에 대한 RecordPath를 지정해야 합니다")
+                .explanation("At least one RecordPath must be specified")
                 .build());
     }
 
@@ -114,11 +110,9 @@ public class UpdateTimestampColumn extends AbstractRecordProcessor {
 
     @Override
     protected Record process(Record record, final FlowFile flowFile, final ProcessContext context, final long count) {
-        final boolean evaluateValueAsRecordPath = context.getProperty(COLUMN_NAMES).getValue().equals(RECORD_PATH_VALUES.getValue());
+        final boolean evaluateValueAsRecordPath = context.getProperty(REPLACEMENT_VALUE_STRATEGY).getValue().equals(RECORD_PATH_VALUES.getValue());
 
-        // 사용자가 입력한 모든 RecordPath 문자열을 추출
         for (final String recordPathText : recordPaths) {
-            // RecordPath를 컴파일하고 그 결과를 반환
             final RecordPath recordPath = recordPathCache.getCompiled(recordPathText);
             final RecordPathResult result = recordPath.evaluate(record);
 
@@ -144,6 +138,7 @@ public class UpdateTimestampColumn extends AbstractRecordProcessor {
                         fieldVariables.put(FIELD_NAME, fieldVal.getField().getFieldName());
                         fieldVariables.put(FIELD_VALUE, DataTypeUtils.toString(fieldVal.getValue(), (String) null));
                         fieldVariables.put(FIELD_TYPE, fieldVal.getField().getDataType().getFieldType().name());
+                        fieldVariables.put(RECORD_INDEX, String.valueOf(count));
 
                         final String evaluatedReplacementVal = replacementValue.evaluateAttributeExpressions(flowFile, fieldVariables).getValue();
                         fieldVal.updateValue(evaluatedReplacementVal, RecordFieldType.STRING.getDataType());
