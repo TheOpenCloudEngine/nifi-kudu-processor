@@ -8,6 +8,11 @@
 # mvn -Dmaven.test.skip=true clean package
 ```
 
+## Dependency
+
+* Maven Dependency를 추가할때에는 NiFi 자체의 구현체를 추가하지 않고 API 부분 등만 추가하도록 한다.
+* 실제 구현체를 추가하는 경우 Dependency라고 할지라도 NiFi 자체 구현체까지 배포가 된다.
+
 ## Processors
 
 ### UpdateTimestampColumn

@@ -47,6 +47,7 @@ public class TestUpdateTimestampColumn {
         readerService.addSchemaField("track_out_time", RecordFieldType.TIMESTAMP);
     }
 
+
     @Test
     public void testTimestamp() {
         // 속성을 설정

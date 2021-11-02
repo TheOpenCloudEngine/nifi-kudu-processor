@@ -30,6 +30,7 @@ public abstract class AbstractRecordProcessor extends AbstractProcessor {
             .identifiesControllerService(RecordReaderFactory.class)
             .required(true)
             .build();
+
     static final PropertyDescriptor RECORD_WRITER = new PropertyDescriptor.Builder()
             .name("record-writer")
             .displayName("Record Writer")

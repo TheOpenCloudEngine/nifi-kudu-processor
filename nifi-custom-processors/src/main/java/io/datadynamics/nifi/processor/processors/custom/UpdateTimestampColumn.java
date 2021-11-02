@@ -187,6 +187,7 @@ public class UpdateTimestampColumn extends AbstractRecordProcessor {
                     .build();
 
             if (properties.get(pd) == null) {
+                // TODO : Not Supported Operation
                 properties.put(pd, valuesMap.get(StringUtils.removeStart(recordPathText, "/")));
             }
 
