@@ -1,1 +1,1 @@
-io.datadynamics.nifi.processor.processors.custom.UpdateTimestampColumn
+io.datadynamics.nifi.processor.processors.custom.UpdateLogProcessor
