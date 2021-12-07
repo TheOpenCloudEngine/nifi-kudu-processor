@@ -1,2 +1,1 @@
-io.datadynamics.nifi.processor.processors.custom.MyProcessor
 io.datadynamics.nifi.processor.processors.custom.ModifiedPutKudu
