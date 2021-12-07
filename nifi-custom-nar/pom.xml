@@ -16,6 +16,9 @@
     <properties>
         <maven.javadoc.skip>true</maven.javadoc.skip>
         <source.skip>true</source.skip>
+        
+        <username>root</username>
+        <password>dd98969231</password>
     </properties>
 
     <build>
@@ -27,6 +30,83 @@
                 <configuration>
                     <!--                    <enforceDocGeneration>false</enforceDocGeneration>-->
                 </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.0.0</version>
+                <executions>
+                    <execution>
+                        <id>scp</id>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <echo message="Copying NAR to NiFi Library" />
+                                <scp todir="root:dd98969321@172.30.1.214:/root/nifi/lib" trust="true" failonerror="true">
+                                    <fileset dir="${basedir}/target">
+                                        <include name="nifi-custom-nar-1.0.0.nar"/>
+                                    </fileset>
+                                </scp>
+<!--
+                                <scp todir="root:dd98969321@172.30.1.215:/opt/nifi/lib" trust="true" failonerror="true">
+                                    <fileset dir="${basedir}/target">
+                                        <include name="nifi-custom-nar-1.0.0.nar"/>
+                                    </fileset>
+                                </scp>
+                                <scp todir="root:dd98969321@172.30.1.216:/opt/nifi/lib" trust="true" failonerror="true">
+                                    <fileset dir="${basedir}/target">
+                                        <include name="nifi-custom-nar-1.0.0.nar"/>
+                                    </fileset>
+                                </scp>
+-->
+                            </target>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>restart</id>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <echo message="Restarting NiFi" />
+                                <sshexec host="172.30.1.214" username="root" password="dd98969321" trust="true"
+                                         timeout="20000" failonerror="false" command="sh /root/nifi/bin/nifi.sh restart" />
+<!--
+                                <sshexec host="172.30.1.215" username="root" password="dd98969321" trust="true"
+                                         timeout="20000" failonerror="false" command="sh /opt/nifi/bin/nifi.sh restart" />
+                                <sshexec host="172.30.1.216" username="root" password="dd98969321" trust="true"
+                                         timeout="20000" failonerror="false" command="sh /opt/nifi/bin/nifi.sh restart" />
+-->
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.apache.ant</groupId>
+                        <artifactId>ant-jsch</artifactId>
+                        <version>1.10.12</version>
+                    </dependency>
+                    <dependency>
+                        <groupId>com.jcraft</groupId>
+                        <artifactId>jsch</artifactId>
+                        <version>0.1.55</version>
+                    </dependency>
+                    <dependency>
+                        <groupId>commons-net</groupId>
+                        <artifactId>commons-net</artifactId>
+                        <version>1.4.1</version>
+                    </dependency>
+                    <dependency>
+                        <groupId>org.apache.ant</groupId>
+                        <artifactId>ant-commons-net</artifactId>
+                        <version>1.8.1</version>
+                    </dependency>
+                </dependencies>
             </plugin>
         </plugins>
     </build>
@@ -41,7 +121,7 @@
         <dependency>
             <groupId>org.apache.nifi</groupId>
             <artifactId>nifi-standard-services-api-nar</artifactId>
-            <version>1.14.0</version>
+            <version>1.15.0</version>
             <type>nar</type>
         </dependency>
     </dependencies>

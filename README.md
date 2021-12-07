@@ -5,7 +5,23 @@
 ## Build
 
 ```
-# mvn -Dmaven.test.skip=true clean package
+# mvn -Dmaven.buildNumber.revisionOnScmFailure=no-scm -Dmaven.buildNumber.skip=true -Dmaven.test.skip=true clean package
+```
+
+## Deploy
+
+### Deploy NAR
+
+```
+# cd nifi-custom-nar
+# mvn antrun:run@scp
+```
+
+### NiFi Restart
+
+```
+# cd nifi-custom-nar
+# mvn antrun:run@restart
 ```
 
 ## Dependency
@@ -13,19 +29,15 @@
 * Maven Dependency를 추가할때에는 NiFi 자체의 구현체를 추가하지 않고 API 부분 등만 추가하도록 한다.
 * 실제 구현체를 추가하는 경우 Dependency라고 할지라도 NiFi 자체 구현체까지 배포가 된다.
 
-## Processors
+## ETC
 
-### UpdateTimestampColumn
+```bash
+#!/bin/sh
 
-#### 용도
-
-* Avro 등의 컬럼 메타데이터에서 Timestamp 컬럼의 값을 변경하기 위한 용도
-* 날짜 포맷을 변경하거나 Timezone을 변경할 수 있음
-
-#### 입력 파라미터
-
-* 변환할 Timestamp 컬럼명 목록
-  * column-names-values : create_time,track_out_time 
-* 변환에 필요한 생성 규칙 목록 (예; ${create_time.value:format("yyyy-MM-dd HH:mm:ss", "Asia/Seoul")} )
-  * column-values-string : /create_time=${create_time.value:format("yyyy-MM-dd HH:mm:ss", "Asia/Seoul")}
-
+FILES=`ls -lsa $1/*.jar | awk '{print $10}'`
+for FILE in $FILES
+do
+	echo $FILE
+	jar tvf $FILE | grep $2	
+done
+```
