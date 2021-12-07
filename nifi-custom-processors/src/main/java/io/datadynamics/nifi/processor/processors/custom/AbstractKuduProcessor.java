@@ -32,8 +32,11 @@ import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -386,14 +389,14 @@ public abstract class AbstractKuduProcessor extends AbstractProcessor {
                         DataType fieldType = record.getSchema().getDataType(recordFieldName).get();
                         Timestamp timestamp = DataTypeUtils.toTimestamp(record.getValue(recordFieldName), () -> DataTypeUtils.getDateFormat(fieldType.getFormat()), recordFieldName);
 
-                        getLogger().info("====================================================");
-                        getLogger().info(String.format("Field Name : %s", recordFieldName));
-                        getLogger().info(String.format("Field Type : %s", fieldType.getFieldType()));
-                        getLogger().info(String.format("Field Type Format : %s", fieldType.getFormat()));
-                        getLogger().info(String.format("Value : %s", record.getValue(recordFieldName)));
-                        getLogger().info(String.format("Timestamp Value : %s", timestamp.getTime()));
-                        getLogger().info(String.format("Timestamp Format Value : %s", formatter.format(new Date(timestamp.getTime()))));
-                        getLogger().info("====================================================");
+                        getLogger().debug("====================================================");
+                        getLogger().debug(String.format("Field Name : %s", recordFieldName));
+                        getLogger().debug(String.format("Field Type : %s", fieldType.getFieldType()));
+                        getLogger().debug(String.format("Field Type Format : %s", fieldType.getFormat()));
+                        getLogger().debug(String.format("Value : %s", record.getValue(recordFieldName)));
+                        getLogger().debug(String.format("Timestamp Value : %s", timestamp.getTime()));
+                        getLogger().debug(String.format("Timestamp Format Value : %s", formatter.format(new Date(timestamp.getTime()))));
+                        getLogger().debug("====================================================");
 
                         row.addTimestamp(columnIndex, timestamp);
                         break;

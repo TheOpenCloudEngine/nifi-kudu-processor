@@ -22,6 +22,8 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.temporal.ChronoField;
 import java.util.*;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -31,6 +33,11 @@ import java.util.regex.Pattern;
 public class DataTypeUtils {
 
     private static final Logger logger = LoggerFactory.getLogger(DataTypeUtils.class);
+
+    public static DateTimeFormatter formatter = new DateTimeFormatterBuilder()
+            .appendPattern("yyyy-MM-dd HH:mm:ss")
+            .appendFraction(ChronoField.MICRO_OF_SECOND, 0, 6, true)
+            .toFormatter();
 
     // Regexes for parsing Floating-Point numbers
     private static final String OptionalSign = "[\\-\\+]?";
@@ -1344,18 +1351,9 @@ public class DataTypeUtils {
             }
 
             try {
-                if (format == null) {
-                    return new Timestamp(Long.parseLong(string));
-                }
-
-                final DateFormat dateFormat = format.get();
-                if (dateFormat == null) {
-                    return new Timestamp(Long.parseLong(string));
-                }
-
-                final java.util.Date utilDate = dateFormat.parse(string);
-                return new Timestamp(utilDate.getTime());
-            } catch (final ParseException e) {
+                LocalDateTime parse = LocalDateTime.parse(string, formatter);
+                return Timestamp.valueOf(parse);
+            } catch (final Exception e) {
                 final DateFormat dateFormat = format.get();
                 final String formatDescription;
                 if (dateFormat == null) {
