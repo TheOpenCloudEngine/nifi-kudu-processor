@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>io.datadynamics.nifi.processor</groupId>
+        <artifactId>nifi-custom-kudu-processor</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>nifi-custom-kudu-nar</artifactId>
+    <version>1.0.0</version>
+    <packaging>nar</packaging>
+
+    <properties>
+        <maven.javadoc.skip>true</maven.javadoc.skip>
+        <source.skip>true</source.skip>
+    </properties>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.nifi</groupId>
+                <artifactId>nifi-nar-maven-plugin</artifactId>
+                <version>1.3.2</version>
+            </plugin>
+        </plugins>
+    </build>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.datadynamics.nifi.processor</groupId>
+            <artifactId>nifi-custom-kudu-processors</artifactId>
+            <version>1.0.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.nifi</groupId>
+            <artifactId>nifi-standard-services-api-nar</artifactId>
+            <version>1.13.2</version>
+            <type>nar</type>
+        </dependency>
+    </dependencies>
+
+</project>

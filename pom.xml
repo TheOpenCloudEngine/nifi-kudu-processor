@@ -5,17 +5,17 @@
     <parent>
         <groupId>org.apache.nifi</groupId>
         <artifactId>nifi-nar-bundles</artifactId>
-        <version>1.15.0</version>
+        <version>1.13.2</version>
     </parent>
 
     <groupId>io.datadynamics.nifi.processor</groupId>
-    <artifactId>nifi-custom-processor</artifactId>
+    <artifactId>nifi-custom-kudu-processor</artifactId>
     <version>1.0.0</version>
     <packaging>pom</packaging>
 
     <modules>
-        <module>nifi-custom-processors</module>
-        <module>nifi-custom-nar</module>
+        <module>nifi-custom-kudu-processors</module>
+        <module>nifi-custom-kudu-nar</module>
     </modules>
 
 </project>
