@@ -1198,12 +1198,15 @@ public class DataTypeUtils {
     }
 
     public static Timestamp toTimestamp(final Object value, final Supplier<DateFormat> format, final String fieldName) {
+        logger.info(String.format("[Before] %s = %s", fieldName, value));
         if (value == null) {
             return null;
         }
 
         if (value instanceof Timestamp) {
-            return (Timestamp) value;
+            Timestamp value1 = (Timestamp) value;
+            logger.info(String.format("[After] %s = %s", fieldName, value1));
+            return value1;
         }
 
         if (value instanceof java.util.Date) {
@@ -1212,7 +1215,9 @@ public class DataTypeUtils {
 
         if (value instanceof Number) {
             final long longValue = ((Number) value).longValue();
-            return new Timestamp(longValue);
+            Timestamp timestamp = new Timestamp(longValue);
+            logger.info(String.format("[After] %s = %s", fieldName, timestamp));
+            return timestamp;
         }
 
         if (value instanceof String) {
@@ -1224,7 +1229,10 @@ public class DataTypeUtils {
             // FIXED
             LocalDateTime localDateTime = LocalDateTime.parse(string, DEFAULT_NANOSECONDS_FORMATTER);
             localDateTime.plus(Duration.ofHours(9));
-            return Timestamp.valueOf(localDateTime);
+            Timestamp timestamp = Timestamp.valueOf(localDateTime);
+
+            logger.info(String.format("[After] %s = %s", fieldName, timestamp));
+            return timestamp;
         }
 
         throw new IllegalTypeConversionException("Cannot convert value [" + value + "] of type " + value.getClass() + " to Timestamp for field " + fieldName);
