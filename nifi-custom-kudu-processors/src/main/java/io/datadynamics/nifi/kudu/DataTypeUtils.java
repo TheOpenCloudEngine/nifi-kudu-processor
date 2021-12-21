@@ -17,7 +17,6 @@
 package io.datadynamics.nifi.kudu;
 
 import org.apache.nifi.serialization.SimpleRecordSchema;
-import org.apache.nifi.serialization.record.Record;
 import org.apache.nifi.serialization.record.*;
 import org.apache.nifi.serialization.record.type.*;
 import org.apache.nifi.serialization.record.util.IllegalTypeConversionException;
@@ -40,7 +39,6 @@ import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.temporal.ChronoField;
-import java.time.temporal.TemporalAmount;
 import java.util.*;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -56,6 +54,8 @@ public class DataTypeUtils {
             .appendPattern("yyyy-MM-dd HH:mm:ss")
             .appendFraction(ChronoField.MICRO_OF_SECOND, 0, 6, true)
             .toFormatter();
+
+    public static SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
 
     // Regexes for parsing Floating-Point numbers
     private static final String OptionalSign = "[\\-\\+]?";
@@ -1198,15 +1198,12 @@ public class DataTypeUtils {
     }
 
     public static Timestamp toTimestamp(final Object value, final Supplier<DateFormat> format, final String fieldName) {
-        logger.info(String.format("[Before] %s = %s", fieldName, value));
         if (value == null) {
             return null;
         }
 
         if (value instanceof Timestamp) {
-            Timestamp value1 = (Timestamp) value;
-            logger.info(String.format("[After] %s = %s", fieldName, value1));
-            return value1;
+            return (Timestamp) value;
         }
 
         if (value instanceof java.util.Date) {
@@ -1215,9 +1212,7 @@ public class DataTypeUtils {
 
         if (value instanceof Number) {
             final long longValue = ((Number) value).longValue();
-            Timestamp timestamp = new Timestamp(longValue);
-            logger.info(String.format("[After] %s = %s", fieldName, timestamp));
-            return timestamp;
+            return new Timestamp(longValue);
         }
 
         if (value instanceof String) {
@@ -1228,11 +1223,8 @@ public class DataTypeUtils {
 
             // FIXED
             LocalDateTime localDateTime = LocalDateTime.parse(string, DEFAULT_NANOSECONDS_FORMATTER);
-            localDateTime.plus(Duration.ofHours(9));
-            Timestamp timestamp = Timestamp.valueOf(localDateTime);
-
-            logger.info(String.format("[After] %s = %s", fieldName, timestamp));
-            return timestamp;
+            LocalDateTime plus = localDateTime.plus(Duration.ofHours(9));
+            return Timestamp.valueOf(plus);
         }
 
         throw new IllegalTypeConversionException("Cannot convert value [" + value + "] of type " + value.getClass() + " to Timestamp for field " + fieldName);
