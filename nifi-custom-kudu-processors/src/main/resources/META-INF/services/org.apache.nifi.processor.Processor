@@ -1,1 +1,1 @@
-io.datadynamics.nifi.kudu.NanoTimestampSupportPutKudu
+io.datadynamics.nifi.kudu.AddNineHoursPutKudu

@@ -16,6 +16,7 @@
  */
 package io.datadynamics.nifi.kudu;
 
+
 import org.apache.kudu.Schema;
 import org.apache.kudu.client.*;
 import org.apache.nifi.annotation.behavior.*;
@@ -52,17 +53,18 @@ import java.util.stream.Collectors;
 
 import static org.apache.nifi.expression.ExpressionLanguageScope.*;
 
+@SystemResourceConsideration(resource = SystemResource.MEMORY)
 @EventDriven
 @SupportsBatching
 @RequiresInstanceClassLoading // Because of calls to UserGroupInformation.setConfiguration
 @InputRequirement(InputRequirement.Requirement.INPUT_REQUIRED)
-@Tags({"put", "database", "custom", "kudu"})
+@Tags({"put", "database", "NoSQL", "kudu", "HDFS", "record"})
 @CapabilityDescription("Reads records from an incoming FlowFile using the provided Record Reader, and writes those records " +
         "to the specified Kudu's table. The schema for the Kudu table is inferred from the schema of the Record Reader." +
         " If any error occurs while reading records from the input, or writing records to Kudu, the FlowFile will be routed to failure")
 @WritesAttribute(attribute = "record.count", description = "Number of records written to Kudu")
 
-public class NanoTimestampSupportPutKudu extends AbstractKuduProcessor {
+public class AddNineHoursPutKudu extends AbstractKuduProcessor {
 
     static final AllowableValue FAILURE_STRATEGY_ROUTE = new AllowableValue("route-to-failure", "Route to Failure",
             "The FlowFile containing the Records that failed to insert will be routed to the 'failure' relationship");
@@ -241,7 +243,7 @@ public class NanoTimestampSupportPutKudu extends AbstractKuduProcessor {
 
     // Properties set in onScheduled.
     private volatile int batchSize = 100;
-    private volatile int ffbatch = 1;
+    private volatile int ffbatch   = 1;
     private volatile SessionConfiguration.FlushMode flushMode;
     private volatile Function<Record, OperationType> recordPathOperationType;
     private volatile RecordPath dataRecordPath;
@@ -270,6 +272,8 @@ public class NanoTimestampSupportPutKudu extends AbstractKuduProcessor {
         properties.add(IGNORE_NULL);
         properties.add(KUDU_OPERATION_TIMEOUT_MS);
         properties.add(KUDU_KEEP_ALIVE_PERIOD_TIMEOUT_MS);
+        properties.add(WORKER_COUNT);
+        properties.add(KUDU_SASL_PROTOCOL_NAME);
         return properties;
     }
 
@@ -284,7 +288,7 @@ public class NanoTimestampSupportPutKudu extends AbstractKuduProcessor {
     @OnScheduled
     public void onScheduled(final ProcessContext context) throws LoginException {
         batchSize = context.getProperty(BATCH_SIZE).evaluateAttributeExpressions().asInteger();
-        ffbatch = context.getProperty(FLOWFILE_BATCH_SIZE).evaluateAttributeExpressions().asInteger();
+        ffbatch   = context.getProperty(FLOWFILE_BATCH_SIZE).evaluateAttributeExpressions().asInteger();
         flushMode = SessionConfiguration.FlushMode.valueOf(context.getProperty(FLUSH_MODE).getValue().toUpperCase());
         createKerberosUserAndOrKuduClient(context);
         supportsInsertIgnoreOp = supportsIgnoreOperations();
@@ -316,12 +320,12 @@ public class NanoTimestampSupportPutKudu extends AbstractKuduProcessor {
 
         final KerberosUser user = getKerberosUser();
         if (user == null) {
-            executeOnKuduClient(kuduClient -> trigger(context, session, flowFiles, kuduClient));
+            executeOnKuduClient(kuduClient -> processFlowFiles(context, session, flowFiles, kuduClient));
             return;
         }
 
         final PrivilegedExceptionAction<Void> privilegedAction = () -> {
-            executeOnKuduClient(kuduClient -> trigger(context, session, flowFiles, kuduClient));
+            executeOnKuduClient(kuduClient -> processFlowFiles(context, session, flowFiles, kuduClient));
             return null;
         };
 
@@ -329,25 +333,60 @@ public class NanoTimestampSupportPutKudu extends AbstractKuduProcessor {
         action.execute();
     }
 
-    private void trigger(final ProcessContext context, final ProcessSession session, final List<FlowFile> flowFiles, KuduClient kuduClient) throws ProcessException {
-        final RecordReaderFactory recordReaderFactory = context.getProperty(RECORD_READER).asControllerService(RecordReaderFactory.class);
-
-        final KuduSession kuduSession = createKuduSession(kuduClient);
-
-        final Map<FlowFile, Integer> numRecords = new HashMap<>();
+    private void processFlowFiles(final ProcessContext context, final ProcessSession session, final List<FlowFile> flowFiles, final KuduClient kuduClient) {
+        final Map<FlowFile, Integer> processedRecords = new HashMap<>();
         final Map<FlowFile, Object> flowFileFailures = new HashMap<>();
         final Map<Operation, FlowFile> operationFlowFileMap = new HashMap<>();
-
-        int numBuffered = 0;
-        OperationType prevOperationType = OperationType.INSERT;
         final List<RowError> pendingRowErrors = new ArrayList<>();
+
+        final KuduSession kuduSession = createKuduSession(kuduClient);
+        try {
+            processRecords(flowFiles,
+                    processedRecords,
+                    flowFileFailures,
+                    operationFlowFileMap,
+                    pendingRowErrors,
+                    session,
+                    context,
+                    kuduClient,
+                    kuduSession);
+        } finally {
+            try {
+                flushKuduSession(kuduSession, true, pendingRowErrors);
+            } catch (final KuduException|RuntimeException e) {
+                getLogger().error("KuduSession.close() Failed", e);
+            }
+        }
+
+        if (isRollbackOnFailure() && (!pendingRowErrors.isEmpty() || !flowFileFailures.isEmpty())) {
+            logFailures(pendingRowErrors, operationFlowFileMap);
+            session.rollback();
+            context.yield();
+        } else {
+            transferFlowFiles(flowFiles, processedRecords, flowFileFailures, operationFlowFileMap, pendingRowErrors, session);
+        }
+    }
+
+    private void processRecords(final List<FlowFile> flowFiles,
+                                final Map<FlowFile, Integer> processedRecords,
+                                final Map<FlowFile, Object> flowFileFailures,
+                                final Map<Operation, FlowFile> operationFlowFileMap,
+                                final List<RowError> pendingRowErrors,
+                                final ProcessSession session,
+                                final ProcessContext context,
+                                final KuduClient kuduClient,
+                                final KuduSession kuduSession) {
+        final RecordReaderFactory recordReaderFactory = context.getProperty(RECORD_READER).asControllerService(RecordReaderFactory.class);
+
+        int bufferedRecords = 0;
+        OperationType prevOperationType = OperationType.INSERT;
         for (FlowFile flowFile : flowFiles) {
             try (final InputStream in = session.read(flowFile);
                  final RecordReader recordReader = recordReaderFactory.createRecordReader(flowFile, in, getLogger())) {
 
                 final String tableName = getEvaluatedProperty(TABLE_NAME, context, flowFile);
-                final Boolean ignoreNull = Boolean.valueOf(getEvaluatedProperty(IGNORE_NULL, context, flowFile));
-                final Boolean lowercaseFields = Boolean.valueOf(getEvaluatedProperty(LOWERCASE_FIELD_NAMES, context, flowFile));
+                final boolean ignoreNull = Boolean.parseBoolean(getEvaluatedProperty(IGNORE_NULL, context, flowFile));
+                final boolean lowercaseFields = Boolean.parseBoolean(getEvaluatedProperty(LOWERCASE_FIELD_NAMES, context, flowFile));
                 final boolean handleSchemaDrift = Boolean.parseBoolean(getEvaluatedProperty(HANDLE_SCHEMA_DRIFT, context, flowFile));
 
                 final Function<Record, OperationType> operationTypeFunction;
@@ -369,7 +408,7 @@ public class NanoTimestampSupportPutKudu extends AbstractKuduProcessor {
                             .collect(Collectors.toList());
 
                     if (!missing.isEmpty()) {
-                        getLogger().info("adding {} columns to table '{}' to handle schema drift", new Object[]{missing.size(), tableName});
+                        getLogger().info("adding {} columns to table '{}' to handle schema drift", missing.size(), tableName);
 
                         // Add each column one at a time to avoid failing if some of the missing columns
                         // we created by a concurrent thread or application attempting to handle schema drift.
@@ -381,7 +420,7 @@ public class NanoTimestampSupportPutKudu extends AbstractKuduProcessor {
                                 // Ignore the exception if the column already exists due to concurrent
                                 // threads or applications attempting to handle schema drift.
                                 if (e.getStatus().isAlreadyPresent()) {
-                                    getLogger().info("Column already exists in table '{}' while handling schema drift", new Object[]{tableName});
+                                    getLogger().info("Column already exists in table '{}' while handling schema drift", tableName);
                                 } else {
                                     throw new ProcessException(e);
                                 }
@@ -394,8 +433,7 @@ public class NanoTimestampSupportPutKudu extends AbstractKuduProcessor {
                 }
 
                 Record record = recordSet.next();
-                recordReaderLoop:
-                while (record != null) {
+                recordReaderLoop: while (record != null) {
                     final OperationType operationType = operationTypeFunction.apply(record);
 
                     final List<Record> dataRecords;
@@ -445,8 +483,8 @@ public class NanoTimestampSupportPutKudu extends AbstractKuduProcessor {
                         // Flush mutation buffer of KuduSession to avoid "MANUAL_FLUSH is enabled
                         // but the buffer is too big" error. This can happen when flush mode is
                         // MANUAL_FLUSH and a FlowFile has more than one records.
-                        if (numBuffered == batchSize && flushMode == SessionConfiguration.FlushMode.MANUAL_FLUSH) {
-                            numBuffered = 0;
+                        if (bufferedRecords == batchSize && flushMode == SessionConfiguration.FlushMode.MANUAL_FLUSH) {
+                            bufferedRecords = 0;
                             flushKuduSession(kuduSession, false, pendingRowErrors);
                         }
 
@@ -459,69 +497,48 @@ public class NanoTimestampSupportPutKudu extends AbstractKuduProcessor {
                             break recordReaderLoop;
                         }
 
-                        numBuffered++;
-                        numRecords.merge(flowFile, 1, Integer::sum);
+                        bufferedRecords++;
+                        processedRecords.merge(flowFile, 1, Integer::sum);
                     }
 
                     record = recordSet.next();
                 }
             } catch (Exception ex) {
-                getLogger().error("Failed to push {} to Kudu", new Object[]{flowFile}, ex);
+                getLogger().error("Failed to push {} to Kudu", new Object[] {flowFile}, ex);
                 flowFileFailures.put(flowFile, ex);
             }
         }
+    }
 
-        // If configured to rollback on failure, and there's at least one error, rollback the session and return.
-        if (isRollbackOnFailure() && (!pendingRowErrors.isEmpty() || !flowFileFailures.isEmpty())) {
-            logFailures(pendingRowErrors, operationFlowFileMap);
-            session.rollback();
-            context.yield();
-            return;
-        }
-
-        // If any data is buffered, flush it.
-        if (numBuffered > 0) {
-            try {
-                flushKuduSession(kuduSession, true, pendingRowErrors);
-            } catch (final Exception e) {
-                getLogger().error("Failed to flush/close Kudu Session", e);
-                for (final FlowFile flowFile : flowFiles) {
-                    session.transfer(flowFile, REL_FAILURE);
-                }
-
-                return;
-            }
-        }
-
-        // It's possible that there were no row errors when this was checked above, but flushing the Kudu session may have introduced
-        // one or more Row Errors. So we need to check again.
-        if (isRollbackOnFailure() && !pendingRowErrors.isEmpty()) {
-            logFailures(pendingRowErrors, operationFlowFileMap);
-            session.rollback();
-            context.yield();
-            return;
-        }
-
+    private void transferFlowFiles(final List<FlowFile> flowFiles,
+                                   final Map<FlowFile, Integer> processedRecords,
+                                   final Map<FlowFile, Object> flowFileFailures,
+                                   final Map<Operation, FlowFile> operationFlowFileMap,
+                                   final List<RowError> pendingRowErrors,
+                                   final ProcessSession session) {
         // Find RowErrors for each FlowFile
-        final Map<FlowFile, List<RowError>> flowFileRowErrors = pendingRowErrors.stream().collect(
-                Collectors.groupingBy(e -> operationFlowFileMap.get(e.getOperation())));
+        final Map<FlowFile, List<RowError>> flowFileRowErrors = pendingRowErrors.stream()
+                .filter(e -> operationFlowFileMap.get(e.getOperation()) != null)
+                .collect(
+                        Collectors.groupingBy(e -> operationFlowFileMap.get(e.getOperation()))
+                );
 
         long totalCount = 0L;
-        for (final FlowFile flowFile : flowFiles) {
-            final int count = numRecords.getOrDefault(flowFile, 0);
+        for (FlowFile flowFile : flowFiles) {
+            final int count = processedRecords.getOrDefault(flowFile, 0);
             totalCount += count;
             final List<RowError> rowErrors = flowFileRowErrors.get(flowFile);
 
             if (rowErrors != null) {
-                rowErrors.forEach(rowError -> getLogger().error("Failed to write due to {}", new Object[]{rowError.toString()}));
-                session.putAttribute(flowFile, RECORD_COUNT_ATTR, String.valueOf(count - rowErrors.size()));
+                rowErrors.forEach(rowError -> getLogger().error("Failed to write due to {}", rowError.toString()));
+                flowFile = session.putAttribute(flowFile, RECORD_COUNT_ATTR, Integer.toString(count - rowErrors.size()));
                 totalCount -= rowErrors.size(); // Don't include error rows in the the counter.
                 session.transfer(flowFile, REL_FAILURE);
             } else {
-                session.putAttribute(flowFile, RECORD_COUNT_ATTR, String.valueOf(count));
+                flowFile = session.putAttribute(flowFile, RECORD_COUNT_ATTR, String.valueOf(count));
 
                 if (flowFileFailures.containsKey(flowFile)) {
-                    getLogger().error("Failed to write due to {}", new Object[]{flowFileFailures.get(flowFile)});
+                    getLogger().error("Failed to write due to {}", flowFileFailures.get(flowFile));
                     session.transfer(flowFile, REL_FAILURE);
                 } else {
                     session.transfer(flowFile, REL_SUCCESS);
@@ -541,7 +558,7 @@ public class NanoTimestampSupportPutKudu extends AbstractKuduProcessor {
             final FlowFile flowFile = entry.getKey();
             final List<RowError> errors = entry.getValue();
 
-            getLogger().error("Could not write {} to Kudu due to: {}", new Object[]{flowFile, errors});
+            getLogger().error("Could not write {} to Kudu due to: {}", flowFile, errors);
         }
     }
 
@@ -561,8 +578,8 @@ public class NanoTimestampSupportPutKudu extends AbstractKuduProcessor {
     }
 
     protected Operation createKuduOperation(OperationType operationType, Record record,
-                                            List<String> fieldNames, Boolean ignoreNull,
-                                            Boolean lowercaseFields, KuduTable kuduTable) {
+                                            List<String> fieldNames, boolean ignoreNull,
+                                            boolean lowercaseFields, KuduTable kuduTable) {
         Operation operation;
         switch (operationType) {
             case INSERT:
