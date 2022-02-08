@@ -114,11 +114,12 @@ public abstract class AbstractKuduProcessor extends AbstractProcessor {
             .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
             .build();
 
-    private static final int DEFAULT_WORKER_COUNT = 2 * Runtime.getRuntime().availableProcessors();
+    // private static final int DEFAULT_WORKER_COUNT = 2 * Runtime.getRuntime().availableProcessors();
+    private static final int DEFAULT_WORKER_COUNT = 2;
     static final PropertyDescriptor WORKER_COUNT = new Builder()
             .name("worker-count")
-            .displayName("Kudu Client Worker Count")
-            .description("The maximum number of worker threads handling Kudu client read and write operations. Defaults to the number of available processors multiplied by 2.")
+            .displayName("Kudu Client의 워커 쓰레드의 개수")
+            .description("Kudu Client가 읽기 및 쓰기 작업을 수행할때 사용하는 워커 쓰레드의 최대 개수. 원 기능은 CPU Core 개수의 2배수로 설정된다. 하나의 NiFi Flow에서 과도하고 많은 이 Kudu 모듈을 사용하는 경우 수많은 쓰레드가 생성되어 JVM이 정상 동작할 수 없는 상태가 될 수 있음. 따라서 Queue의 유입되는 양, Kudu 오퍼레이션의 성능, 파일의 크기에 따라서 이 개수를 조정하도록 함.")
             .required(true)
             .defaultValue(Integer.toString(DEFAULT_WORKER_COUNT))
             .addValidator(StandardValidators.POSITIVE_INTEGER_VALIDATOR)
