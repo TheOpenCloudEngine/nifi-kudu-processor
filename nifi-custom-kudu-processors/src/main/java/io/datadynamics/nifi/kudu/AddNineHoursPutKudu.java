@@ -16,7 +16,6 @@
  */
 package io.datadynamics.nifi.kudu;
 
-
 import org.apache.kudu.Schema;
 import org.apache.kudu.client.*;
 import org.apache.nifi.annotation.behavior.*;
